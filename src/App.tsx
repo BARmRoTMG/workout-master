@@ -1,7 +1,6 @@
 import { Icon, type IconName } from './components/ui'
 import { go, useActiveWorkout, useRoute } from './hooks'
 import { ExerciseScreen } from './screens/ExerciseScreen'
-import { HistoryScreen } from './screens/HistoryScreen'
 import { ProgressScreen } from './screens/ProgressScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { TodayScreen } from './screens/TodayScreen'
@@ -9,27 +8,23 @@ import { WorkoutScreen } from './screens/WorkoutScreen'
 
 const TABS: { path: string; label: string; icon: IconName }[] = [
   { path: '', label: 'Today', icon: 'today' },
-  { path: 'history', label: 'History', icon: 'history' },
   { path: 'progress', label: 'Progress', icon: 'chart' },
-  { path: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
 export default function App() {
-  const [section = '', param] = useRoute()
+  const [section = '', param, sub] = useRoute()
   const active = useActiveWorkout()
 
   let screen
   switch (section) {
     case 'workout':
-      screen = <WorkoutScreen key={param} id={Number(param)} />
+      screen = <WorkoutScreen key={param} id={Number(param)} edit={sub === 'edit'} />
       break
     case 'exercise':
       screen = <ExerciseScreen id={param ?? ''} />
       break
-    case 'history':
-      screen = <HistoryScreen />
-      break
     case 'progress':
+    case 'history':
       screen = <ProgressScreen />
       break
     case 'settings':
@@ -40,7 +35,7 @@ export default function App() {
   }
 
   const inLiveWorkout = section === 'workout' && active?.id === Number(param)
-  const tab = section === 'workout' || section === 'exercise' ? 'history' : section
+  const tab = section === '' ? '' : 'progress'
 
   return (
     <div className="app">

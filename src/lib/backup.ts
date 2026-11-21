@@ -1,16 +1,17 @@
-import { db, loadSettings, type BodyWeight, type Workout } from '../db'
+import { db, loadSettings, type BodyWeight, type StepDay, type Workout } from '../db'
 import type { Exercise } from '../data/exercises'
-import type { ExerciseMap } from './engine'
-import { dateKey, toLocalInput } from './format'
+import { dateKey } from './format'
 
 interface Backup {
   app: 'workout-master'
-  version: 1
+  /** 1 had no steps; 2 adds them. Both restore. */
+  version: 1 | 2
   exportedAt: string
   settings: unknown
   workouts: Workout[]
   bodyweights: BodyWeight[]
   customExercises: Exercise[]
+  steps?: StepDay[]
 }
 
 function download(name: string, text: string, type: string) {
@@ -25,12 +26,13 @@ function download(name: string, text: string, type: string) {
 export async function exportBackup() {
   const data: Backup = {
     app: 'workout-master',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     settings: await loadSettings(),
     workouts: await db.workouts.toArray(),
     bodyweights: await db.bodyweights.toArray(),
     customExercises: await db.customExercises.toArray(),
+    steps: await db.steps.toArray(),
   }
   download(`workout-backup-${dateKey()}.json`, JSON.stringify(data), 'application/json')
 }
@@ -41,31 +43,15 @@ export async function importBackup(file: File) {
   if (data.app !== 'workout-master' || !Array.isArray(data.workouts)) {
     throw new Error("That file isn't a Workout Master backup.")
   }
-  await db.transaction('rw', [db.workouts, db.bodyweights, db.customExercises, db.kv], async () => {
-    await Promise.all([db.workouts.clear(), db.bodyweights.clear(), db.customExercises.clear()])
+  await db.transaction('rw', [db.workouts, db.bodyweights, db.customExercises, db.kv, db.steps], async () => {
+    await Promise.all([db.workouts.clear(), db.bodyweights.clear(), db.customExercises.clear(), db.steps.clear()])
     await db.workouts.bulkAdd(data.workouts!)
     await db.bodyweights.bulkAdd(data.bodyweights ?? [])
     await db.customExercises.bulkAdd(data.customExercises ?? [])
+    await db.steps.bulkAdd(data.steps ?? [])
     if (data.settings) await db.kv.put({ key: 'settings', value: data.settings })
   })
   return data.workouts.length
-}
-
-export async function exportCsv(exMap: ExerciseMap) {
-  const { unit } = await loadSettings()
-  const rows = [['date', 'exercise', 'set', `weight_${unit}`, 'reps']]
-  const workouts = await db.workouts.orderBy('startedAt').toArray()
-  for (const w of workouts) {
-    if (w.finishedAt === null) continue
-    for (const e of w.exercises) {
-      e.sets.forEach((s, i) => {
-        if (!s.done) return
-        rows.push([toLocalInput(w.startedAt).replace('T', ' '), exMap.get(e.exerciseId)?.name ?? e.exerciseId, String(i + 1), String(s.weight ?? 0), String(s.reps ?? 0)])
-      })
-    }
-  }
-  const csv = rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\n')
-  download(`workouts-${dateKey()}.csv`, csv, 'text/csv')
 }
 
 /** Converts every stored weight when the unit changes, rounded to sensible plate steps. */

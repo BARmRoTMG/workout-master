@@ -54,6 +54,11 @@ export function useBodyweights() {
   return useLiveQuery(() => db.bodyweights.orderBy('date').toArray())
 }
 
+/** Daily step counts, oldest first. */
+export function useSteps() {
+  return useLiveQuery(() => db.steps.orderBy('date').toArray())
+}
+
 // ---------------------------------------------------------------------------
 // Misc
 

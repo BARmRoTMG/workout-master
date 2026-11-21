@@ -36,6 +36,15 @@ export interface BodyWeight {
   weight: number
 }
 
+export interface StepDay {
+  /** Local date, YYYY-MM-DD. */
+  date: string
+  steps: number
+  /** When it was last updated, so the tile can say how fresh it is. */
+  at: number
+  source: 'health' | 'manual'
+}
+
 export interface Settings {
   unit: Unit
   planMuscles: Muscle[]
@@ -44,6 +53,7 @@ export interface Settings {
   restIsolation: number
   weeklySetTarget: number
   barWeight: number
+  stepGoal: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -54,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   restIsolation: 90,
   weeklySetTarget: 10,
   barWeight: 20,
+  stepGoal: 8000,
 }
 
 interface KV {
@@ -66,6 +77,7 @@ export const db = new Dexie('workout-master') as Dexie & {
   bodyweights: EntityTable<BodyWeight, 'id'>
   customExercises: EntityTable<Exercise, 'id'>
   kv: EntityTable<KV, 'key'>
+  steps: EntityTable<StepDay, 'date'>
 }
 
 db.version(1).stores({
@@ -73,6 +85,15 @@ db.version(1).stores({
   bodyweights: '++id, &date',
   customExercises: 'id',
   kv: 'key',
+})
+
+// v2: daily step counts. Existing tables carry over unchanged.
+db.version(2).stores({
+  workouts: '++id, startedAt',
+  bodyweights: '++id, &date',
+  customExercises: 'id',
+  kv: 'key',
+  steps: 'date',
 })
 
 export async function loadSettings(): Promise<Settings> {

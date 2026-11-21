@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Unit } from '../db'
 import { platesPerSide } from '../lib/engine'
 import { fmtW } from '../lib/format'
@@ -26,6 +27,10 @@ const PATHS = {
   arrowDown: 'M12 5v14M6 13l6 6 6-6',
   equal: 'M6 9h12M6 15h12',
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  heart: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z',
+  steps: 'M8.5 3.5c1.6 0 2.4 1.9 2.4 4.1s-.9 3.9-2.4 3.9-2.4-1.7-2.4-3.9.8-4.1 2.4-4.1zM6.4 14.2h4.2l-.3 2.6a1.8 1.8 0 0 1-3.6 0zM15.5 7.5c1.6 0 2.4 1.9 2.4 4.1s-.9 3.9-2.4 3.9-2.4-1.7-2.4-3.9.8-4.1 2.4-4.1zM13.4 18.2h4.2l-.3 1.6a1.8 1.8 0 0 1-3.6 0z',
+  scale: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8 10.5a5 5 0 0 1 8 0M12 10.5l1.6-2.2',
+  play: 'M8 5.5v13l10.5-6.5z',
 } as const
 
 export type IconName = keyof typeof PATHS
@@ -86,10 +91,13 @@ export function Sheet({
   title,
   onClose,
   children,
+  fit,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
+  /** Size to the content instead of the tall list height. */
+  fit?: boolean
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -100,9 +108,10 @@ export function Sheet({
       document.body.classList.remove('locked')
     }
   }, [onClose])
-  return (
+  // Portalled to <body> so an animated ancestor can't trap the fixed overlay.
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={'sheet' + (fit ? ' fit' : '')} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <h2>{title}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
@@ -111,7 +120,8 @@ export function Sheet({
         </div>
         <div className="sheet-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -125,6 +135,7 @@ export function NumInput({
   decimal,
   label,
   className,
+  autoFocus,
 }: {
   value: number | null
   onChange: (v: number | null) => void
@@ -132,6 +143,7 @@ export function NumInput({
   decimal?: boolean
   label: string
   className?: string
+  autoFocus?: boolean
 }) {
   const [draft, setDraft] = useState(fmtW(value))
   const focused = useRef(false)
@@ -144,6 +156,8 @@ export function NumInput({
       inputMode={decimal ? 'decimal' : 'numeric'}
       aria-label={label}
       placeholder={placeholder}
+      autoFocus={autoFocus}
+      enterKeyHint="done"
       value={draft}
       onFocus={(e) => {
         focused.current = true
@@ -219,6 +233,31 @@ export function Meter({ value, max, marker, tone }: { value: number; max: number
     <div className={'meter ' + (tone ?? '')}>
       <span style={{ width: `${Math.min(100, (value / max) * 100)}%` }} />
       {marker !== undefined && <i style={{ left: `${(marker / max) * 100}%` }} />}
+    </div>
+  )
+}
+
+/** Progress ring, e.g. steps toward the daily goal. */
+export function Ring({ value, size = 64, stroke = 7, children }: { value: number; size?: number; stroke?: number; children?: ReactNode }) {
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const v = Math.max(0, Math.min(1, value))
+  return (
+    <div className={'ring' + (v >= 1 ? ' met' : '')} style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle className="ring-track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} />
+        <circle
+          className="ring-fill"
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          strokeWidth={stroke}
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - v)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      {children && <div className="ring-in">{children}</div>}
     </div>
   )
 }

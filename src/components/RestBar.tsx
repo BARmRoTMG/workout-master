@@ -3,6 +3,7 @@ import { useNow } from '../hooks'
 import { fmtClock } from '../lib/format'
 import { addRest, stopRest, useRest } from '../lib/rest'
 
+/** Countdown pinned to the bottom of the live workout. */
 export function RestBar() {
   const rest = useRest()
   const now = useNow(250)
@@ -14,7 +15,7 @@ export function RestBar() {
     if (!over || !rest || buzzed.current === rest.endAt) return
     buzzed.current = rest.endAt
     navigator.vibrate?.([200, 100, 200])
-    const t = setTimeout(stopRest, 6000)
+    const t = setTimeout(stopRest, 5000)
     return () => clearTimeout(t)
   }, [over, rest])
 
@@ -25,19 +26,14 @@ export function RestBar() {
     <div className={'rest-bar' + (over ? ' over' : '')} role="timer" aria-live="polite">
       <span className="rest-fill" style={{ transform: `scaleX(${progress})` }} />
       <div className="rest-content">
-        <div>
+        <div className="rest-read">
           <span className="eyebrow">{over ? 'Rest over' : 'Rest'}</span>
-          <span className="rest-time">{over ? 'GO' : fmtClock(remaining)}</span>
+          <span className="rest-time">{over ? 'Go' : fmtClock(remaining)}</span>
         </div>
         {!over && (
-          <div className="row gap">
-            <button type="button" className="btn ghost small" onClick={() => addRest(-15)}>
-              −15
-            </button>
-            <button type="button" className="btn ghost small" onClick={() => addRest(15)}>
-              +15
-            </button>
-          </div>
+          <button type="button" className="btn small ghost" onClick={() => addRest(30)}>
+            +30s
+          </button>
         )}
         <button type="button" className="btn small" onClick={stopRest}>
           {over ? 'OK' : 'Skip'}

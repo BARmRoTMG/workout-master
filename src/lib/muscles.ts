@@ -49,3 +49,11 @@ export const RECOVERY_HOURS: Record<MuscleSize, number> = {
   medium: 60,
   small: 48,
 }
+
+/** Plate-colour family used to tint exercises: push red, pull green, legs blue. */
+export function family(m: Muscle): 'push' | 'pull' | 'legs' | 'core' {
+  if (m === 'chest' || m === 'shoulders' || m === 'triceps') return 'push'
+  if (m === 'back' || m === 'biceps') return 'pull'
+  if (m === 'abs') return 'core'
+  return 'legs'
+}

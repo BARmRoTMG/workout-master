@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { MuscleTag, NumInput, Icon } from '../components/ui'
-import { db, type Settings, type Workout } from '../db'
-import { go, useActiveWorkout, useBodyweights, useExerciseMap, useNow, useSettings, useWorkouts } from '../hooks'
-import { startWorkout } from '../lib/actions'
-import { READY_AT, suggestWorkout, type Suggestion, type Target } from '../lib/engine'
+import { StepsTile, WeightTile } from '../components/Daily'
+import { Icon } from '../components/ui'
+import type { Settings, Workout } from '../db'
+import { go, useActiveWorkout, useExerciseMap, useNow, useSettings, useWorkouts } from '../hooks'
+import { logPastWorkout, startWorkout } from '../lib/actions'
+import { suggestWorkout, type SuggestedItem, type Target } from '../lib/engine'
 import { dateKey, fmtClock, fmtW, pad2, relativeDay } from '../lib/format'
-import { MUSCLE_LABEL, MUSCLES } from '../lib/muscles'
+import { family, MUSCLE_LABEL, type Muscle } from '../lib/muscles'
 
 export function TodayScreen() {
   const workouts = useWorkouts()
@@ -13,255 +14,196 @@ export function TodayScreen() {
   const settings = useSettings()
   const active = useActiveWorkout()
   const [anyway, setAnyway] = useState(false)
-  const now = useNow(60_000)
+  const [starting, setStarting] = useState(false)
+  const now = useNow(30_000)
 
   if (!workouts || active === undefined) return <div className="page" />
 
   const finished = workouts.filter((w) => w.finishedAt !== null)
   const s = suggestWorkout({ workouts, exMap, settings, now, includeRecovering: anyway })
-  const last = finished[0]
+  const resting = !active && s.restDay && !anyway
+  const sets = s.items.reduce((n, it) => n + it.target.reps.length, 0)
+
+  const start = async () => {
+    setStarting(true)
+    const id = await startWorkout(s.items)
+    go(`workout/${id}`)
+  }
+
+  let title = 'Full body'
+  let sub = `${s.items.length} lifts · ${sets} sets · about ${s.minutes} min`
+  if (active) {
+    title = 'Workout on'
+    sub = 'Pick up where you left off'
+  } else if (resting) {
+    title = 'Rest day'
+    sub = `Muscles grow while they recover. Walk instead: ${settings.stepGoal.toLocaleString()} steps.`
+  } else if (!s.items.length) {
+    sub = 'Choose muscles for your plan in Settings.'
+  }
 
   return (
     <div className="page today">
-      <header className="page-head">
-        <span className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-        <h1 className="display">Today</h1>
-        {last && <p className="muted">Last workout: {relativeDay(last.startedAt, now).toLowerCase()}</p>}
+      <header className="hero">
+        <div className="row between">
+          <span className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <WeekDots workouts={finished} now={now} />
+        </div>
+        <h1 className="display xl">{title}</h1>
+        <p className="hero-sub">{sub}</p>
       </header>
 
+      <div className="tiles">
+        <StepsTile settings={settings} />
+        <WeightTile settings={settings} />
+      </div>
+
       {active ? (
-        <ActiveCard workout={active} />
+        <ActivePlan workout={active} />
+      ) : resting ? (
+        <RecoveringNote s={s.recovering} resting />
       ) : (
-        <SuggestionCard s={s} settings={settings} anyway={anyway} onAnyway={() => setAnyway(true)} isFirst={!finished.length} />
+        <>
+          <PlanList items={s.items} settings={settings} />
+          <RecoveringNote s={s.recovering} />
+        </>
       )}
 
-      <WeighInCard settings={settings} />
+      {!finished.length && !active && (
+        <button
+          type="button"
+          className="text-link"
+          onClick={async () => go(`workout/${await logPastWorkout(exMap)}/edit`)}
+        >
+          Trained before installing? Log that workout
+        </button>
+      )}
 
-      <section className="card">
-        <div className="row between">
-          <h2 className="h2">Recovery</h2>
-          <span className="muted small">ready at {READY_AT}%</span>
-        </div>
-        <div className="recovery">
-          {MUSCLES.map((m) => {
-            const f = s.freshness[m]
-            return (
-              <div key={m} className={'rec' + (f >= READY_AT ? ' ready' : '')}>
-                <span>{MUSCLE_LABEL[m]}</span>
-                <div className="rec-bar">
-                  <i style={{ width: `${f}%` }} />
-                </div>
-                <b>{f}%</b>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      <InstallHint />
 
-      <ThisWeek workouts={finished} now={now} />
+      <div className="dock">
+        {active ? (
+          <ContinueButton workout={active} />
+        ) : resting ? (
+          <button type="button" className="go-btn quiet" onClick={() => setAnyway(true)}>
+            Train anyway
+          </button>
+        ) : (
+          <button type="button" className="go-btn" onClick={start} disabled={starting || !s.items.length}>
+            <Icon name="play" size={22} />
+            <span>Start workout</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-function ActiveCard({ workout }: { workout: Workout }) {
+function ContinueButton({ workout }: { workout: Workout }) {
   const now = useNow()
-  const sets = workout.exercises.flatMap((e) => e.sets)
   return (
-    <button type="button" className="card active-card" onClick={() => go(`workout/${workout.id}`)}>
+    <button type="button" className="go-btn live" onClick={() => go(`workout/${workout.id}`)}>
       <span className="live-pill">Live</span>
-      <span className="clock">{fmtClock((now - workout.startedAt) / 1000)}</span>
-      <span className="muted">
-        {sets.filter((x) => x.done).length}/{sets.length} sets · tap to continue
-      </span>
+      <span>Continue</span>
+      <span className="go-clock">{fmtClock((now - workout.startedAt) / 1000)}</span>
     </button>
   )
 }
 
-function targetText(t: Target, settings: Settings, repMin: number, repMax: number) {
+function targetText(t: Target, unit: string) {
   const n = t.reps.length
-  if (t.weight === null) return `${n} × ${repMin}–${repMax}`
+  if (t.weight === null) return `${n} sets · pick a weight`
   const reps = t.reps.every((r) => r === t.reps[0]) ? `${t.reps[0]}` : t.reps.join('/')
-  if (t.rule === 'bodyweight' && !t.weight) return `${n} × ${reps}`
-  return `${n} × ${reps} @ ${fmtW(t.weight)} ${settings.unit}`
+  if (!t.weight) return `${n} × ${reps}`
+  return `${n} × ${reps} · ${fmtW(t.weight)} ${unit}`
 }
 
-function SuggestionCard({
-  s,
-  settings,
-  anyway,
-  onAnyway,
-  isFirst,
-}: {
-  s: Suggestion
-  settings: Settings
-  anyway: boolean
-  onAnyway: () => void
-  isFirst: boolean
-}) {
-  const [starting, setStarting] = useState(false)
-  const start = async (withItems: boolean) => {
-    setStarting(true)
-    const id = await startWorkout(withItems ? s.items : [])
-    go(`workout/${id}`)
-  }
-  const sets = s.items.length * settings.setsPerExercise
-
-  if (s.restDay && !anyway) {
-    return (
-      <section className="card rest-day">
-        <span className="eyebrow">Suggested</span>
-        <h2 className="display small">Rest day</h2>
-        <p>
-          Most of your plan is still recovering from your last session. Muscle grows while you rest, so take today off
-          from lifting.
-        </p>
-        <p className="muted">
-          For fat loss, a 30–45 minute walk or easy cardio works well today without slowing recovery.
-        </p>
-        <RecoveringList s={s} />
-        <div className="row gap">
-          <button type="button" className="btn ghost" onClick={onAnyway}>
-            Train anyway
-          </button>
-          <button type="button" className="btn ghost" onClick={() => start(false)} disabled={starting}>
-            Empty workout
-          </button>
-        </div>
-      </section>
-    )
-  }
-
+function PlanList({ items, settings }: { items: SuggestedItem[]; settings: Settings }) {
+  if (!items.length) return null
   return (
-    <section className="card suggest">
-      <div className="row between">
-        <span className="eyebrow">Suggested · full body</span>
-        <span className="muted small">
-          {s.items.length} exercises · {sets} sets · ~{s.minutes} min
-        </span>
-      </div>
-      {isFirst && (
-        <p className="muted small">
-          Built from your plan in Settings. The order follows the rules: compounds first, alternating legs and upper body,
-          arms after the lifts they help with.
-        </p>
-      )}
-      <ol className="plan">
-        {s.items.map((it, i) => (
-          <li key={it.exercise.id}>
-            <span className="ord">{pad2(i + 1)}</span>
-            <div>
-              <div className="plan-name">
-                <a href={`#/exercise/${it.exercise.id}`}>{it.exercise.name}</a>
-                {it.target.rule === 'increase' && <span className="up" title="Weight goes up">▲</span>}
-                {it.target.rule === 'deload' && <span className="down" title="Lighter this time">▼</span>}
-              </div>
-              <div className="plan-meta">
-                <MuscleTag muscle={it.exercise.primary} />
-                <span>{targetText(it.target, settings, it.exercise.repMin, it.exercise.repMax)}</span>
-              </div>
-              <p className="reason">{it.reason}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      {!s.items.length && <p className="muted">Nothing in your plan is ready. Pick muscles in Settings.</p>}
-      <RecoveringList s={s} />
-      <div className="row gap">
-        <button
-          type="button"
-          className="btn primary grow"
-          onClick={() => start(true)}
-          disabled={starting || !s.items.length}
-        >
-          Start workout
-        </button>
-        <button type="button" className="btn ghost" onClick={() => start(false)} disabled={starting}>
-          Empty
-        </button>
-      </div>
-    </section>
+    <ol className="plan">
+      {items.map((it, i) => (
+        <li key={it.exercise.id} className={`fam-${family(it.exercise.primary)}`}>
+          <span className="ord">{pad2(i + 1)}</span>
+          <span className="plan-name">{it.exercise.name}</span>
+          <span className="plan-target">
+            {it.target.rule === 'increase' && <b className="up">▲ </b>}
+            {it.target.rule === 'deload' && <b className="down">▼ </b>}
+            {targetText(it.target, settings.unit)}
+          </span>
+        </li>
+      ))}
+    </ol>
   )
 }
 
-function RecoveringList({ s }: { s: Suggestion }) {
-  if (!s.recovering.length) return null
+function ActivePlan({ workout }: { workout: Workout }) {
+  const exMap = useExerciseMap()
   return (
-    <p className="recovering">
-      <span className="muted small">Still recovering:</span>
-      {s.recovering.map((r) => (
-        <span key={r.muscle} className="tag plain">
-          {MUSCLE_LABEL[r.muscle]} {r.freshness}%
-        </span>
-      ))}
+    <ol className="plan">
+      {workout.exercises.map((e, i) => {
+        const done = e.sets.filter((s) => s.done).length
+        const ex = exMap.get(e.exerciseId)
+        return (
+          <li key={e.uid} className={(ex ? `fam-${family(ex.primary)}` : '') + (done === e.sets.length && done ? ' complete' : '')}>
+            <span className="ord">{done === e.sets.length && done ? '✓' : pad2(i + 1)}</span>
+            <span className="plan-name">{ex?.name ?? 'Exercise'}</span>
+            <span className="plan-target">
+              {done}/{e.sets.length} sets
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+function RecoveringNote({ s, resting }: { s: { muscle: Muscle; freshness: number }[]; resting?: boolean }) {
+  if (!s.length) return null
+  const names = s.map((r) => MUSCLE_LABEL[r.muscle].toLowerCase())
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+  return (
+    <p className={'recovering' + (resting ? ' big' : '')}>
+      {resting ? 'Still recovering: ' : 'Skipping today, still recovering: '}
+      <b>{list}</b>.
     </p>
   )
 }
 
-function WeighInCard({ settings }: { settings: Settings }) {
-  const entries = useBodyweights()
-  const today = dateKey()
-  const todays = entries?.find((e) => e.date === today)
-  const [value, setValue] = useState<number | null>(null)
-  if (!entries) return null
-  if (todays) {
-    return (
-      <button type="button" className="card weigh done" onClick={() => go('progress')}>
-        <Icon name="check" size={18} />
-        <span>
-          Weighed in: <b>{fmtW(todays.weight)} {settings.unit}</b>
-        </span>
-        <span className="muted small">see trend →</span>
-      </button>
-    )
-  }
-  const save = async () => {
-    if (!value) return
-    await db.bodyweights.put({ date: today, weight: value })
-  }
-  return (
-    <section className="card weigh">
-      <div>
-        <h2 className="h2">Morning weigh-in</h2>
-        <p className="muted small">Same time daily, after the bathroom. The 7-day average is what counts.</p>
-      </div>
-      <div className="row gap">
-        <NumInput decimal label="Body weight" value={value} onChange={setValue} placeholder={settings.unit} className="wide-num" />
-        <button type="button" className="btn primary" disabled={!value} onClick={save}>
-          Save
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function ThisWeek({ workouts, now }: { workouts: Workout[]; now: number }) {
-  const weekStart = new Date(now)
-  weekStart.setHours(0, 0, 0, 0)
-  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
+/** Mon–Sun, filled on days you trained. */
+function WeekDots({ workouts, now }: { workouts: Workout[]; now: number }) {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
+  const trained = new Set(workouts.map((w) => dateKey(new Date(w.startedAt))))
+  const today = dateKey(new Date(now))
   const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart)
+    const d = new Date(start)
     d.setDate(d.getDate() + i)
     return d
   })
-  const trained = new Set(workouts.map((w) => dateKey(new Date(w.startedAt))))
   const count = days.filter((d) => trained.has(dateKey(d))).length
+  const last = workouts[0]
   return (
-    <section className="card">
-      <div className="row between">
-        <h2 className="h2">This week</h2>
-        <span className="muted small">{count} workout{count === 1 ? '' : 's'} · aim for 3</span>
-      </div>
-      <div className="week">
-        {days.map((d) => {
-          const k = dateKey(d)
-          return (
-            <div key={k} className={'day' + (trained.has(k) ? ' on' : '') + (k === dateKey(new Date(now)) ? ' today' : '')}>
-              <span>{d.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
-              <i />
-            </div>
-          )
-        })}
-      </div>
-    </section>
+    <span
+      className="week-dots"
+      aria-label={`${count} workouts this week${last ? `, last ${relativeDay(last.startedAt, now).toLowerCase()}` : ''}`}
+    >
+      {days.map((d) => {
+        const k = dateKey(d)
+        return <i key={k} className={(trained.has(k) ? 'on' : '') + (k === today ? ' is-today' : '')} title={d.toLocaleDateString(undefined, { weekday: 'long' })} />
+      })}
+    </span>
+  )
+}
+
+function InstallHint() {
+  const standalone =
+    window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone
+  if (standalone) return null
+  return (
+    <p className="install-hint">
+      <b>Install it:</b> on iPhone tap Share → Add to Home Screen. It opens full screen and works offline at the gym.
+    </p>
   )
 }

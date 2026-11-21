@@ -173,8 +173,8 @@ export function muscleFreshness(workouts: Workout[], exMap: ExerciseMap, now: nu
   const fatigue = zeroes()
   for (const w of workouts) {
     if (w.finishedAt === null) continue
-    const hours = (now - w.finishedAt) / HOUR
-    if (hours < 0) continue
+    // A finish time a moment in the future (short sessions are stamped at least a minute long) counts as just now.
+    const hours = Math.max(0, (now - w.finishedAt) / HOUR)
     const add = (m: Muscle, amount: number) => {
       fatigue[m] += amount * Math.max(0, 1 - hours / RECOVERY_HOURS[MUSCLE_SIZE[m]])
     }

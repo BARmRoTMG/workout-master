@@ -1,34 +1,28 @@
-import { useEffect, useState } from 'react'
-import { DEFAULT_SETTINGS, saveSettings, type Settings } from '../db'
-import { useExerciseMap, useSettings } from '../hooks'
-import { convertUnits, exportBackup, exportCsv, importBackup } from '../lib/backup'
-import { fmtClock } from '../lib/format'
+import { useState } from 'react'
+import { ShortcutSetup } from '../components/Daily'
+import { Icon } from '../components/ui'
+import { saveSettings, type Settings } from '../db'
+import { go, useSettings } from '../hooks'
+import { convertUnits, exportBackup, importBackup } from '../lib/backup'
 import { MUSCLE_LABEL, MUSCLES } from '../lib/muscles'
 
 export function SettingsScreen() {
   const settings = useSettings()
-  const exMap = useExerciseMap()
   const [message, setMessage] = useState<string | null>(null)
-  const [persisted, setPersisted] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    void navigator.storage?.persisted?.().then(setPersisted)
-  }, [])
-
   const set = (patch: Partial<Settings>) => void saveSettings(patch)
 
   return (
     <div className="page">
       <header className="page-head">
+        <button type="button" className="icon-btn" onClick={() => go('progress')} aria-label="Back">
+          <Icon name="back" />
+        </button>
         <h1 className="display">Settings</h1>
       </header>
 
       <section className="card">
         <h2 className="h2">Your plan</h2>
-        <p className="muted small">
-          Muscles to hit in each full-body workout, one exercise each. Glutes get worked by leg press and Romanian
-          deadlifts already.
-        </p>
+        <p className="muted small">The muscles each full-body workout hits, one exercise each.</p>
         <div className="chips">
           {MUSCLES.map((m) => {
             const on = settings.planMuscles.includes(m)
@@ -51,82 +45,48 @@ export function SettingsScreen() {
             )
           })}
         </div>
+        <Stepper label="Sets per exercise" value={settings.setsPerExercise} min={1} max={6} onChange={(v) => set({ setsPerExercise: v })} />
         <Stepper
-          label="Sets per exercise"
-          value={settings.setsPerExercise}
-          min={1}
-          max={6}
-          onChange={(v) => set({ setsPerExercise: v })}
+          label="Daily steps goal"
+          value={settings.stepGoal}
+          min={3000}
+          max={20000}
+          step={1000}
+          format={(v) => `${v / 1000}k`}
+          onChange={(v) => set({ stepGoal: v })}
         />
-        <Stepper
-          label="Weekly set goal per muscle"
-          value={settings.weeklySetTarget}
-          min={4}
-          max={20}
-          onChange={(v) => set({ weeklySetTarget: v })}
-        />
-      </section>
-
-      <section className="card">
-        <h2 className="h2">Rest timer</h2>
-        <Stepper
-          label="Compound lifts"
-          value={settings.restCompound}
-          min={30}
-          max={300}
-          step={15}
-          format={fmtClock}
-          onChange={(v) => set({ restCompound: v })}
-        />
-        <Stepper
-          label="Isolation"
-          value={settings.restIsolation}
-          min={30}
-          max={300}
-          step={15}
-          format={fmtClock}
-          onChange={(v) => set({ restIsolation: v })}
-        />
-      </section>
-
-      <section className="card">
-        <h2 className="h2">Units</h2>
-        <div className="seg">
-          {(['kg', 'lb'] as const).map((u) => (
-            <button
-              type="button"
-              key={u}
-              className={settings.unit === u ? 'on' : ''}
-              onClick={() => convertUnits(settings.unit, u)}
-            >
-              {u}
-            </button>
-          ))}
+        <div className="stepper">
+          <span>Units</span>
+          <div className="seg">
+            {(['kg', 'lb'] as const).map((u) => (
+              <button type="button" key={u} className={settings.unit === u ? 'on' : ''} onClick={() => convertUnits(settings.unit, u)}>
+                {u}
+              </button>
+            ))}
+          </div>
         </div>
-        <p className="muted small">Switching converts everything you've logged.</p>
-        <Stepper
-          label={`Barbell weight (${settings.unit})`}
-          value={settings.barWeight}
-          min={5}
-          max={45}
-          step={settings.unit === 'kg' ? 2.5 : 5}
-          onChange={(v) => set({ barWeight: v })}
-        />
       </section>
 
       <section className="card">
-        <h2 className="h2">Your data</h2>
+        <h2 className="h2">Steps from Apple Health</h2>
         <p className="muted small">
-          Everything is stored only on this phone. Export a backup now and then, since clearing browser data or losing
-          the phone erases it.
-          {persisted === false && ' Your browser may clear it if storage runs low.'}
+          Apple doesn't let web apps read Health directly, so a small Shortcut copies today's steps and you paste them by
+          tapping the steps tile.
         </p>
-        <div className="stack">
-          <button type="button" className="btn ghost" onClick={() => exportBackup()}>
-            Export backup (.json)
+        <ShortcutSetup />
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Backup</h2>
+        <p className="muted small">
+          Everything lives only on this phone. Save a backup to Files now and then in case the phone is lost or reset.
+        </p>
+        <div className="row gap">
+          <button type="button" className="btn ghost grow" onClick={() => exportBackup()}>
+            Save backup
           </button>
-          <label className="btn ghost file-btn">
-            Restore from backup
+          <label className="btn ghost grow file-btn">
+            Restore
             <input
               type="file"
               accept="application/json,.json"
@@ -143,35 +103,9 @@ export function SettingsScreen() {
               }}
             />
           </label>
-          <button type="button" className="btn ghost" onClick={() => exportCsv(exMap)}>
-            Export sets as spreadsheet (.csv)
-          </button>
-          {persisted === false && (
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={async () => setPersisted((await navigator.storage?.persist?.()) ?? false)}
-            >
-              Ask browser to keep data permanently
-            </button>
-          )}
         </div>
         {message && <p className="advice neutral">{message}</p>}
       </section>
-
-      <section className="card">
-        <h2 className="h2">Install on your phone</h2>
-        <p className="muted small">
-          <b>iPhone (Safari):</b> Share → Add to Home Screen. <b>Android (Chrome):</b> menu ⋮ → Install app. It then opens
-          full screen and works offline at the gym.
-        </p>
-      </section>
-
-      <button type="button" className="link-btn muted" onClick={() =>
-          saveSettings({ ...DEFAULT_SETTINGS, unit: settings.unit, barWeight: settings.unit === 'lb' ? 45 : 20 })
-        }>
-        Reset settings to defaults
-      </button>
     </div>
   )
 }
@@ -197,11 +131,11 @@ function Stepper({
     <div className="stepper">
       <span>{label}</span>
       <div className="row">
-        <button type="button" aria-label={`Less ${label}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))}>
+        <button type="button" aria-label={`Less: ${label}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))}>
           −
         </button>
         <b>{format(value)}</b>
-        <button type="button" aria-label={`More ${label}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))}>
+        <button type="button" aria-label={`More: ${label}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))}>
           +
         </button>
       </div>
