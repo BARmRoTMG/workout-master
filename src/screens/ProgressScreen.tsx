@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LineChart } from '../components/LineChart'
 import { StepsChart } from '../components/StepsChart'
 import { ConfirmButton, Icon, Meter } from '../components/ui'
 import { db, type BodyWeight, type Settings, type StepDay, type Workout } from '../db'
 import { go, useBodyweights, useExerciseMap, useNow, useSettings, useSteps, useWorkouts } from '../hooks'
-import { logPastWorkout } from '../lib/actions'
+import { dropEmptyWorkouts, logPastWorkout } from '../lib/actions'
 import { bestSet, doneSets, e1rm, exerciseHistory, trendLine, weeklyRate, weeklySets, type ExerciseMap } from '../lib/engine'
 import { dateKey, fmtDuration, fmtW, relativeDay } from '../lib/format'
 import { MUSCLE_LABEL, MUSCLES } from '../lib/muscles'
@@ -16,6 +16,7 @@ export function ProgressScreen() {
   const entries = useBodyweights()
   const steps = useSteps()
   const now = useNow(60_000)
+  useEffect(() => void dropEmptyWorkouts(), [])
   if (!workouts || !entries || !steps) return <div className="page" />
   const finished = workouts.filter((w) => w.finishedAt !== null)
 

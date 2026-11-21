@@ -52,7 +52,12 @@ function usePicker(workout: Workout, onAdded?: (uid: string) => void) {
     setPicker(null)
     if (!p) return
     const entry = await makeEntry(ex, workout.startedAt)
-    if (workout.finishedAt !== null) for (const s of entry.sets) s.done = true
+    // In a finished workout the sets are what you did, so start them blank rather than at next time's targets.
+    if (workout.finishedAt !== null) {
+      entry.sets = entry.sets.map(() => ({ weight: null, reps: null, done: true }))
+      delete entry.targetNote
+      delete entry.targetRule
+    }
     await updateWorkout(workout.id!, (w) => {
       if (p.mode === 'add') w.exercises.push(entry)
       else {

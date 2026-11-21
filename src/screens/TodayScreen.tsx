@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { StepsTile, WeightTile } from '../components/Daily'
 import { Icon } from '../components/ui'
 import type { Settings, Workout } from '../db'
 import { go, useActiveWorkout, useExerciseMap, useNow, useSettings, useWorkouts } from '../hooks'
-import { logPastWorkout, startWorkout } from '../lib/actions'
+import { dropEmptyWorkouts, logPastWorkout, startWorkout } from '../lib/actions'
 import { suggestWorkout, type SuggestedItem, type Target } from '../lib/engine'
 import { dateKey, fmtClock, fmtW, pad2, relativeDay } from '../lib/format'
 import { family, MUSCLE_LABEL, type Muscle } from '../lib/muscles'
@@ -16,6 +16,7 @@ export function TodayScreen() {
   const [anyway, setAnyway] = useState(false)
   const [starting, setStarting] = useState(false)
   const now = useNow(30_000)
+  useEffect(() => void dropEmptyWorkouts(), [])
 
   if (!workouts || active === undefined) return <div className="page" />
 

@@ -549,10 +549,10 @@ input.wide-num {
 .tile {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  min-height: 92px;
-  padding: 14px 12px;
+  min-height: 88px;
+  padding: 12px 10px;
   text-align: left;
   border-radius: var(--radius);
   border: 1px solid var(--line);
@@ -591,8 +591,8 @@ input.wide-num {
   flex: none;
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1.5px dashed var(--line-strong);
   color: var(--muted);

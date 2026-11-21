@@ -6,8 +6,26 @@ import { dateKey, fmtTime, fmtW } from '../lib/format'
 import { isIOS, pasteStepsFromClipboard, saveSteps, SHORTCUT_NAME, SHORTCUT_URL } from '../lib/steps'
 import { Icon, NumInput, Ring, Sheet } from './ui'
 
-/** Set when the user jumps to the Shortcut, so the tile can invite a paste on return. */
-let healthLaunchedAt = 0
+/**
+ * When the user last jumped to the Shortcut, so the tile can invite a paste on
+ * return. Kept in localStorage because iOS may reload the app meanwhile.
+ */
+const LAUNCH_KEY = 'health-launched-at'
+const readLaunch = () => {
+  try {
+    return Number(localStorage.getItem(LAUNCH_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+const writeLaunch = (t: number) => {
+  try {
+    if (t) localStorage.setItem(LAUNCH_KEY, String(t))
+    else localStorage.removeItem(LAUNCH_KEY)
+  } catch {
+    // Storage unavailable: the tile just won't show the paste hint.
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Steps
@@ -21,7 +39,7 @@ export function StepsTile({ settings }: { settings: Settings }) {
   const today = dateKey(new Date(now))
   const entry = steps?.find((s) => s.date === today)
   const usesHealth = steps?.some((s) => s.source === 'health') ?? false
-  const justLaunched = now - healthLaunchedAt < 10 * 60_000
+  const justLaunched = now - readLaunch() < 10 * 60_000
 
   // Coming back from the Shortcuts app: refresh the label.
   useEffect(() => {
@@ -37,11 +55,12 @@ export function StepsTile({ settings }: { settings: Settings }) {
   }, [note])
 
   const tap = async () => {
-    // Once the Shortcut is in use, a tap pastes straight away; otherwise show the options.
-    if (usesHealth || justLaunched) {
+    // On iPhone (where the Shortcut lives) a tap tries the clipboard first, so the
+    // very first sync works too. Elsewhere only once Health steps have been used.
+    if (isIOS() || usesHealth || justLaunched) {
       const got = await pasteStepsFromClipboard()
       if (got) {
-        healthLaunchedAt = 0
+        writeLaunch(0)
         const t = got.find((r) => r.date === today) ?? got[got.length - 1]
         setNote(`${t.steps.toLocaleString()} from Health`)
         return
@@ -55,13 +74,13 @@ export function StepsTile({ settings }: { settings: Settings }) {
   let sub: string
   if (note) sub = note
   else if (justLaunched) sub = 'Tap to paste from Health'
-  else if (entry) sub = `${entry.source === 'health' ? 'Health' : 'Updated'} · ${fmtTime(entry.at)}`
+  else if (entry) sub = `${entry.source === 'health' ? 'Health' : 'Typed'} ${fmtTime(entry.at)}`
   else sub = usesHealth ? 'Tap to sync' : 'Tap to add'
 
   return (
     <>
       <button type="button" className={'tile steps-tile' + (justLaunched ? ' invite' : '')} onClick={tap}>
-        <Ring value={value / goal} size={58} stroke={6}>
+        <Ring value={value / goal} size={50} stroke={5}>
           <Icon name="steps" size={20} />
         </Ring>
         <span className="tile-body">
@@ -91,14 +110,15 @@ function StepsSheet({ current, goal, onClose }: { current: number | null; goal: 
             className="btn health wide"
             href={SHORTCUT_URL}
             onClick={() => {
-              healthLaunchedAt = Date.now()
+              writeLaunch(Date.now())
               setTimeout(onClose, 300)
             }}
           >
             <Icon name="heart" size={18} /> Get from Apple Health
           </a>
           <p className="muted small">
-            Runs your “{SHORTCUT_NAME}” Shortcut. Come back and tap the steps tile to paste. First time? Set it up below.
+            Runs your “{SHORTCUT_NAME}” Shortcut, which copies today's steps. Come back, tap the steps tile, then tap
+            Paste. First time? Set it up below.
           </p>
         </>
       )}
@@ -139,8 +159,8 @@ export function ShortcutSetup({ collapsed }: { collapsed?: boolean }) {
       <summary>Set up the Health Shortcut (once, about a minute)</summary>
       {body}
       <p className="muted small">
-        Tip: add the Shortcut to your Home Screen or a widget, run it in the evening, then open this app and tap the steps
-        tile. You can also just type the number from the Health app.
+        Tip: add the Shortcut to your Home Screen or a widget. Run it in the evening, open this app, tap the steps tile
+        and tap Paste. You can also just type the number from the Health app.
       </p>
     </details>
   )
@@ -161,8 +181,8 @@ export function WeightTile({ settings }: { settings: Settings }) {
   const unit = settings.unit
 
   let sub: string
-  if (!todays) sub = entries.length ? 'Tap to weigh in' : 'Weigh in each morning'
-  else if (rate !== null) sub = `${rate > 0 ? '+' : ''}${fmtW(Number(rate.toFixed(2)))} ${unit} a week`
+  if (!todays) sub = 'Tap to weigh in'
+  else if (rate !== null) sub = `${rate > 0 ? '+' : ''}${fmtW(Number(rate.toFixed(2)))} ${unit}/week`
   else sub = avg !== undefined && entries.length > 1 ? `7-day avg ${avg.toFixed(1)}` : 'Saved for today'
 
   return (

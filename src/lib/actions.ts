@@ -128,3 +128,13 @@ export async function tidyWorkout(id: number): Promise<boolean> {
   await db.workouts.put(w)
   return true
 }
+
+/**
+ * Removes finished workouts with nothing logged, e.g. a "log a past workout"
+ * that was opened and then left without typing anything.
+ */
+export async function dropEmptyWorkouts() {
+  await db.workouts
+    .filter((w) => w.finishedAt !== null && !w.exercises.some((e) => e.sets.some((x) => (x.reps ?? 0) > 0)))
+    .delete()
+}
