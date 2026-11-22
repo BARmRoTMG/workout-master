@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShortcutSetup } from '../components/Daily'
-import { Icon } from '../components/ui'
+import { NotificationsCard } from '../components/Notifications'
+import { Icon, Stepper } from '../components/ui'
 import { saveSettings, type Settings } from '../db'
 import { go, useSettings } from '../hooks'
 import { convertUnits, exportBackup, importBackup } from '../lib/backup'
@@ -67,6 +68,8 @@ export function SettingsScreen() {
         </div>
       </section>
 
+      <NotificationsCard />
+
       <section className="card">
         <h2 className="h2">Steps from Apple Health</h2>
         <p className="muted small">
@@ -106,39 +109,6 @@ export function SettingsScreen() {
         </div>
         {message && <p className="advice neutral">{message}</p>}
       </section>
-    </div>
-  )
-}
-
-function Stepper({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  format = String,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step?: number
-  format?: (v: number) => string
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="stepper">
-      <span>{label}</span>
-      <div className="row">
-        <button type="button" aria-label={`Less: ${label}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))}>
-          −
-        </button>
-        <b>{format(value)}</b>
-        <button type="button" aria-label={`More: ${label}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))}>
-          +
-        </button>
-      </div>
     </div>
   )
 }

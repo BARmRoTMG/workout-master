@@ -118,15 +118,17 @@ function LiveWorkout({ workout, workouts, exMap, settings }: Props) {
     }
     await completeSet(id, focus.uid, index)
     setPicked(null)
-    const leftHere = focus.sets.some((s, i) => !s.done && i !== index)
-    const leftAnywhere = list.some((e) => e.uid !== focus.uid && hasOpenSet(e))
-    if (leftHere || leftAnywhere) startRest(restFor(exercise, settings))
-    else stopRest()
-    if (!leftHere) {
-      // Next unfinished exercise after this one, wrapping round to any that were skipped.
-      const order = [...list.slice(focusIndex + 1), ...list.slice(0, focusIndex)]
-      const next = order.find(hasOpenSet)
-      setFocusUid(next?.uid ?? null)
+    const nextHere = focus.sets.findIndex((s, i) => !s.done && i !== index)
+    // Next unfinished exercise after this one, wrapping round to any that were skipped.
+    const order = [...list.slice(focusIndex + 1), ...list.slice(0, focusIndex)]
+    const nextEntry = nextHere >= 0 ? focus : order.find(hasOpenSet)
+    if (nextEntry) {
+      const setNo = nextHere >= 0 ? nextHere : nextEntry.sets.findIndex((s) => !s.done)
+      const name = exMap.get(nextEntry.exerciseId)?.name ?? 'Next exercise'
+      startRest(restFor(exercise, settings), `${name} · set ${setNo + 1} of ${nextEntry.sets.length}`, `workout/${id}`)
+    } else stopRest()
+    if (nextHere < 0) {
+      setFocusUid(nextEntry?.uid ?? null)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }

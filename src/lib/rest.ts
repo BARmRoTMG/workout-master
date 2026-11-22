@@ -1,15 +1,21 @@
 import { useSyncExternalStore } from 'react'
+import { appUrl, registerTimerAlerts, syncTimers } from './push'
+import { goTones, scheduleTones, unlockAudio } from './sound'
 
 /**
  * The rest timer stores an end time rather than counting down, so it stays
  * correct when the phone locks or the app is backgrounded. The end beep is
- * scheduled on the audio clock up front, which keeps playing on platforms
- * that throttle JavaScript timers in the background.
+ * scheduled on the audio clock up front, and the push server gets a "rest
+ * over" notification in case the app isn't on screen when it ends.
  */
 
 export interface RestState {
   endAt: number
   duration: number
+  /** What's next, for the notification, e.g. "Bench Press · set 2 of 3". */
+  next?: string
+  /** App route to open from the notification. */
+  route?: string
 }
 
 const KEY = 'rest-timer'
@@ -33,8 +39,13 @@ function set(next: RestState | null) {
   } catch {
     // Storage unavailable: the timer still works for this session.
   }
-  scheduleBeep()
+  beep()
+  syncTimers()
   listeners.forEach((l) => l())
+}
+
+function beep() {
+  scheduleTones('rest', state ? goTones(state.endAt) : [])
 }
 
 export function useRest() {
@@ -47,57 +58,36 @@ export function useRest() {
   )
 }
 
-export function startRest(seconds: number) {
+export function startRest(seconds: number, next?: string, route?: string) {
   unlockAudio()
-  set({ endAt: Date.now() + seconds * 1000, duration: seconds })
+  set({ endAt: Date.now() + seconds * 1000, duration: seconds, next, route })
 }
 
 export function addRest(seconds: number) {
   if (!state) return
   const endAt = Math.max(Date.now(), state.endAt + seconds * 1000)
-  set({ endAt, duration: Math.max(1, state.duration + seconds) })
+  set({ ...state, endAt, duration: Math.max(1, state.duration + seconds) })
 }
 
 export function stopRest() {
   set(null)
 }
 
-// ---------------------------------------------------------------------------
-// Audio
+registerTimerAlerts('rest', () =>
+  state
+    ? [
+        {
+          at: state.endAt,
+          title: 'Rest over',
+          body: state.next ? `Next: ${state.next}` : 'Time for your next set.',
+          tag: 'rest',
+          url: appUrl(state.route ?? ''),
+        },
+      ]
+    : [],
+)
 
-let ctx: AudioContext | null = null
-let scheduled: OscillatorNode[] = []
-
-function unlockAudio() {
-  try {
-    ctx ??= new AudioContext()
-    if (ctx.state === 'suspended') void ctx.resume()
-  } catch {
-    ctx = null
-  }
-}
-
-function scheduleBeep() {
-  scheduled.forEach((o) => {
-    try {
-      o.stop()
-    } catch {
-      // Already stopped.
-    }
-  })
-  scheduled = []
-  if (!ctx || !state) return
-  const at = ctx.currentTime + Math.max(0, (state.endAt - Date.now()) / 1000)
-  for (let i = 0; i < 3; i++) {
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.frequency.value = i === 2 ? 1320 : 880
-    gain.gain.setValueAtTime(0.0001, at + i * 0.22)
-    gain.gain.exponentialRampToValueAtTime(0.35, at + i * 0.22 + 0.01)
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + i * 0.22 + 0.18)
-    osc.connect(gain).connect(ctx.destination)
-    osc.start(at + i * 0.22)
-    osc.stop(at + i * 0.22 + 0.2)
-    scheduled.push(osc)
-  }
+// Audio pauses while the app is in the background; line the beep up again on return.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && beep())
 }

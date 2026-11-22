@@ -31,6 +31,9 @@ const PATHS = {
   steps: 'M8.5 3.5c1.6 0 2.4 1.9 2.4 4.1s-.9 3.9-2.4 3.9-2.4-1.7-2.4-3.9.8-4.1 2.4-4.1zM6.4 14.2h4.2l-.3 2.6a1.8 1.8 0 0 1-3.6 0zM15.5 7.5c1.6 0 2.4 1.9 2.4 4.1s-.9 3.9-2.4 3.9-2.4-1.7-2.4-3.9.8-4.1 2.4-4.1zM13.4 18.2h4.2l-.3 1.6a1.8 1.8 0 0 1-3.6 0z',
   scale: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8 10.5a5 5 0 0 1 8 0M12 10.5l1.6-2.2',
   play: 'M8 5.5v13l10.5-6.5z',
+  pause: 'M8 5v14M16 5v14',
+  timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2M10 2.5h4M18.5 6.5l1.5-1.5',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0',
 } as const
 
 export type IconName = keyof typeof PATHS
@@ -258,6 +261,67 @@ export function Ring({ value, size = 64, stroke = 7, children }: { value: number
         />
       </svg>
       {children && <div className="ring-in">{children}</div>}
+    </div>
+  )
+}
+
+/** A labelled number with − and + buttons. */
+export function Stepper({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  format = String,
+  onChange,
+}: {
+  label: ReactNode
+  value: number
+  min: number
+  max: number
+  step?: number
+  format?: (v: number) => string
+  onChange: (v: number) => void
+}) {
+  const name = typeof label === 'string' ? label : 'value'
+  return (
+    <div className="stepper">
+      <span>{label}</span>
+      <div className="row">
+        <button type="button" aria-label={`Less: ${name}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))}>
+          −
+        </button>
+        <b>{format(value)}</b>
+        <button type="button" aria-label={`More: ${name}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))}>
+          +
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** An on/off switch with a label, and room for an extra control (e.g. a time) beside it. */
+export function Switch({
+  label,
+  sub,
+  checked,
+  onChange,
+  children,
+}: {
+  label: string
+  sub?: string
+  checked: boolean
+  onChange: (on: boolean) => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="switch-row">
+      <span className="switch-text">
+        {label}
+        {sub && <small>{sub}</small>}
+      </span>
+      {children}
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} className="switch" onClick={() => onChange(!checked)} />
     </div>
   )
 }

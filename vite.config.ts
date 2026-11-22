@@ -29,6 +29,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Push and notification-tap handlers (public/push-sw.js).
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

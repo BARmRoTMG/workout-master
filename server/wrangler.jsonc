@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "workout-push",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "durable_objects": {
+    "bindings": [{ "name": "BOX", "class_name": "PushBox" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PushBox"] }],
+  "vars": {
+    // Public half of the VAPID key pair; the private half is a secret (wrangler secret put VAPID_PRIVATE_KEY).
+    "VAPID_PUBLIC_KEY": "BMF6aTpiyIbpv1lgvDnLOCo1LX3qW1-7lkczWJgT85kkxXny0Lmxq9SlysJJwgtodEFvLjCHaTR4t-NsZTDqE_c",
+    "VAPID_SUBJECT": "https://barmrotmg.github.io/workout-master/",
+    "ALLOWED_ORIGINS": "https://barmrotmg.github.io"
+  },
+  "observability": { "enabled": true }
+}
