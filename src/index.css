@@ -1980,3 +1980,193 @@ input.big-num {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------- protein */
+
+.protein-tile { grid-column: 1 / -1; min-height: 76px; }
+.protein-tile .tile-body { flex: 1; }
+.tile-add {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.protein-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.protein-head .display { font-size: 64px; line-height: 0.9; }
+.protein-head span {
+  display: grid;
+  font-weight: 600;
+  color: var(--muted);
+}
+.protein-head small { font-size: 13px; font-weight: 600; }
+.protein-head small.ok { color: var(--good); }
+
+.quick-add {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.quick-add .btn {
+  min-height: 56px;
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 800;
+  background: var(--surface-2);
+}
+.sheet.fit .sheet-body > .added { margin-top: 6px; min-height: 20px; font-size: 13.5px; color: var(--good); }
+
+.foods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+.food {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 52px;
+  padding: 6px 10px;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.food:active { transform: scale(0.97); }
+.food span { display: grid; min-width: 0; }
+.food small { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.food b {
+  flex: none;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.food b::after { content: ' g'; font-family: var(--sans); font-size: 11px; color: var(--muted); }
+
+/* ------------------------------------------------------------------ waist */
+
+.weigh-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.weigh-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.weigh-field > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.weigh-field em {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.weigh-field input.big-num { width: 100%; min-width: 0; }
+.waist-stats { margin-top: 22px !important; padding-top: 16px; border-top: 1px solid var(--line); }
+.prio-star { color: var(--accent); font-weight: 400; }
+
+/* --------------------------------------------------------------- check-in */
+
+.checkin { border-color: var(--line-strong); }
+.checkin-focus {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--muted);
+}
+.checkin-focus.warn { border-left-color: var(--warn); }
+.checkin-focus.good { border-left-color: var(--good); }
+.checkin-focus h2 {
+  margin: 4px 0 6px;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.checkin-focus p { font-size: 14px; line-height: 1.45; }
+.checkin-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.checkin-rows li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: baseline;
+  column-gap: 6px;
+  min-width: 0;
+}
+.checkin-rows i {
+  grid-row: span 2;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.checkin-rows li.good i { background: var(--good-bg); color: var(--good); }
+.checkin-rows li.warn i { background: rgba(255, 154, 74, 0.16); color: var(--warn); }
+.checkin-rows span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.checkin-rows b {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.checkin.compact .checkin-focus h2 { font-size: 26px; }
+.checkin-focus .text-link { margin-top: 8px; padding: 0; }
+/* On narrow phones the time and switch drop under the label together, rather than squeezing it. */
+.switch-row { flex-wrap: wrap; row-gap: 4px; }
+.switch-row .switch-text { flex: 1 1 120px; }
+.switch-ctrl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}

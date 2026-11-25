@@ -18,10 +18,13 @@ export function LineChart({
   formatX,
   label,
   tooltip,
+  xDomain,
 }: {
   line: Pt[]
   dots?: Pt[]
   height?: number
+  /** Fix the date range, so stacked charts line up. */
+  xDomain?: [number, number]
   formatY: (v: number) => string
   formatX: (v: number) => string
   label: string
@@ -38,8 +41,8 @@ export function LineChart({
     const all = [...line, ...(dots ?? [])]
     const xs = all.map((p) => p.x)
     const ys = all.map((p) => p.y)
-    let x0 = Math.min(...xs)
-    let x1 = Math.max(...xs)
+    let x0 = Math.min(...xs, ...(xDomain ? [xDomain[0]] : []))
+    let x1 = Math.max(...xs, ...(xDomain ? [xDomain[1]] : []))
     if (x0 === x1) {
       x0 -= 86_400_000
       x1 += 86_400_000
@@ -59,7 +62,7 @@ export function LineChart({
       x0,
       x1,
     }
-  }, [line, dots, H, pad.l, pad.r, pad.t, pad.b])
+  }, [line, dots, H, pad.l, pad.r, pad.t, pad.b, xDomain])
 
   if (!line.length) return null
 

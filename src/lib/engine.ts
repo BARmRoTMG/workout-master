@@ -84,8 +84,12 @@ const topWeight = (sets: DoneSet[]) => Math.max(...sets.map((s) => s.weight))
  * Double progression: stay at a weight and add reps until every set reaches the
  * top of the rep range, then add weight and start again at the bottom.
  * Missing the bottom of the range two sessions running triggers a 10% deload.
+ *
+ * Only the first `baseSets` sets are judged. A priority muscle's extra sets
+ * come on top, and falling short on them from fatigue is expected, so they
+ * neither hold back an increase nor trigger a deload.
  */
-export function nextTarget(ex: Exercise, history: Session[], setCount: number, unit: Unit): Target {
+export function nextTarget(ex: Exercise, history: Session[], setCount: number, unit: Unit, baseSets = setCount): Target {
   const last = history[0]
   if (!last) {
     return {
@@ -100,7 +104,8 @@ export function nextTarget(ex: Exercise, history: Session[], setCount: number, u
   const work = last.sets.filter((s) => s.weight === top)
   const repsAt = (i: number) => (work[i] ?? work[work.length - 1]).reps
   const inc = incrementFor(ex, unit)
-  const allAtTop = work.length >= setCount && work.every((s) => s.reps >= ex.repMax)
+  const judged = Math.min(baseSets, setCount)
+  const allAtTop = work.length >= judged && work.slice(0, judged).every((s) => s.reps >= ex.repMax)
 
   if (inc === 0) {
     return {
@@ -118,13 +123,22 @@ export function nextTarget(ex: Exercise, history: Session[], setCount: number, u
       weight: roundTo(top + inc, inc / 2),
       reps: Array(setCount).fill(ex.repMin),
       rule: 'increase',
-      note: `+${inc} ${unit}: you hit ${ex.repMax} reps on every set last time`,
+      note:
+        judged < setCount
+          ? `+${inc} ${unit}: you hit ${ex.repMax} reps on your first ${judged} sets last time`
+          : `+${inc} ${unit}: you hit ${ex.repMax} reps on every set last time`,
     }
   }
 
   const missed = (s: Session) => {
     const t = topWeight(s.sets)
-    return t === top && s.sets.some((x) => x.weight === t && x.reps < ex.repMin)
+    return (
+      t === top &&
+      s.sets
+        .filter((x) => x.weight === t)
+        .slice(0, judged)
+        .some((x) => x.reps < ex.repMin)
+    )
   }
   const prev = history[1]
   if (missed(last) && prev && missed(prev)) {
@@ -223,15 +237,19 @@ const MUSCLE_PRIORITY: Muscle[] = [
   'abs',
 ]
 
-/** 0 big compounds, 1 other compounds, 2 isolation for big muscles, 3 arms, 4 calves and abs. */
-function tier(ex: Exercise) {
+/**
+ * 0 big compounds, 1 other compounds, 2 priority muscles' isolation work,
+ * 3 isolation for big muscles, 4 arms, 5 calves and abs.
+ */
+function tier(ex: Exercise, priority: readonly Muscle[]) {
   if (ex.kind === 'compound') return MUSCLE_SIZE[ex.primary] === 'large' ? 0 : 1
-  if (ex.primary === 'calves' || ex.primary === 'abs') return 4
-  return MUSCLE_SIZE[ex.primary] === 'small' ? 3 : 2
+  if (priority.includes(ex.primary)) return 2
+  if (ex.primary === 'calves' || ex.primary === 'abs') return 5
+  return MUSCLE_SIZE[ex.primary] === 'small' ? 4 : 3
 }
 
-function reasonFor(ex: Exercise): string {
-  switch (tier(ex)) {
+function reasonFor(ex: Exercise, priority: readonly Muscle[]): string {
+  switch (tier(ex, priority)) {
     case 0:
       return "Big compound lift: do it first while you're fresh"
     case 1:
@@ -239,8 +257,11 @@ function reasonFor(ex: Exercise): string {
         ? 'Compound press: after the big lifts, before arms'
         : 'Compound: after the big lifts'
     case 2:
-      return 'Isolation: after the compound lifts'
+      // Not before the compounds: tired arms would cost reps on the presses and pulls.
+      return 'Priority muscle: extra sets, straight after the compound lifts'
     case 3:
+      return 'Isolation: after the compound lifts'
+    case 4:
       return ex.primary === 'triceps'
         ? "Late, so tired triceps don't hold back your presses"
         : "Late, so tired biceps don't hold back your rows and pulldowns"
@@ -256,14 +277,15 @@ export interface Ordered {
 
 /**
  * Compounds before isolation, big muscles before small, arms after the lifts
- * they assist, calves and abs last. Within a tier, alternate lower and upper
+ * they assist, calves and abs last. Priority muscles' isolation work moves up
+ * to straight after the compounds. Within a tier, alternate lower and upper
  * body so each region gets a breather.
  */
-export function orderExercises(list: Exercise[]): Ordered[] {
+export function orderExercises(list: Exercise[], priority: readonly Muscle[] = []): Ordered[] {
   const out: Exercise[] = []
-  for (let t = 0; t <= 4; t++) {
+  for (let t = 0; t <= 5; t++) {
     const group = list
-      .filter((ex) => tier(ex) === t)
+      .filter((ex) => tier(ex, priority) === t)
       .sort((a, b) => MUSCLE_PRIORITY.indexOf(a.primary) - MUSCLE_PRIORITY.indexOf(b.primary))
     const lower = group.filter((ex) => LOWER_BODY.has(ex.primary))
     const upper = group.filter((ex) => !LOWER_BODY.has(ex.primary))
@@ -274,7 +296,7 @@ export function orderExercises(list: Exercise[]): Ordered[] {
       wantLower = !LOWER_BODY.has(pick.primary)
     }
   }
-  return out.map((exercise) => ({ exercise, reason: reasonFor(exercise) }))
+  return out.map((exercise) => ({ exercise, reason: reasonFor(exercise, priority) }))
 }
 
 // ---------------------------------------------------------------------------
@@ -325,9 +347,15 @@ export function suggestWorkout(opts: {
     if (ex && !chosen.includes(ex)) chosen.push(ex)
   }
 
-  const items = orderExercises(chosen).map((o) => ({
+  const items = orderExercises(chosen, settings.priorityMuscles).map((o) => ({
     ...o,
-    target: nextTarget(o.exercise, exerciseHistory(workouts, o.exercise.id), settings.setsPerExercise, settings.unit),
+    target: nextTarget(
+      o.exercise,
+      exerciseHistory(workouts, o.exercise.id),
+      setsFor(o.exercise, settings),
+      settings.unit,
+      settings.setsPerExercise,
+    ),
   }))
 
   return {
@@ -340,6 +368,15 @@ export function suggestWorkout(opts: {
   }
 }
 
+/** Extra sets each workout for a priority muscle. */
+export const PRIORITY_EXTRA_SETS = 2
+
+/** Sets per workout for an exercise: the plan's number, plus extra for a priority muscle. */
+export function setsFor(ex: Exercise, settings: Pick<Settings, 'setsPerExercise' | 'priorityMuscles'>) {
+  const base = settings.setsPerExercise
+  return settings.priorityMuscles.includes(ex.primary) ? Math.min(6, base + PRIORITY_EXTRA_SETS) : base
+}
+
 export function restFor(ex: Exercise | undefined, settings: Settings) {
   return ex?.kind === 'compound' ? settings.restCompound : settings.restIsolation
 }
@@ -347,7 +384,7 @@ export function restFor(ex: Exercise | undefined, settings: Settings) {
 /** Rough session length: each set is ~40 s of work plus rest, plus ~2 min to set up each exercise. */
 export function estimateMinutes(exercises: Exercise[], settings: Settings) {
   const secs = exercises.reduce(
-    (sum, ex) => sum + settings.setsPerExercise * (40 + restFor(ex, settings)) + 120,
+    (sum, ex) => sum + setsFor(ex, settings) * (40 + restFor(ex, settings)) + 120,
     0,
   )
   return Math.round(secs / 60 / 5) * 5
@@ -399,14 +436,14 @@ export function trendLine(entries: BodyWeight[]) {
 }
 
 /**
- * Change per week from a least-squares fit over the last 28 days.
- * Null until there are at least 3 weigh-ins spanning a week.
+ * Change per week from a least-squares fit over the last `windowDays` days of
+ * dated values. Null until there are `minPoints` spanning at least a week.
  */
-export function weeklyRate(entries: BodyWeight[]): number | null {
-  if (!entries.length) return null
-  const end = dayNumber(entries[entries.length - 1].date)
-  const pts = entries.filter((e) => end - dayNumber(e.date) <= 28).map((e) => [dayNumber(e.date), e.weight])
-  if (pts.length < 3 || end - pts[0][0] < 7) return null
+export function slopePerWeek(points: { date: string; value: number }[], windowDays = 28, minPoints = 3): number | null {
+  if (!points.length) return null
+  const end = dayNumber(points[points.length - 1].date)
+  const pts = points.filter((p) => end - dayNumber(p.date) <= windowDays).map((p) => [dayNumber(p.date), p.value])
+  if (pts.length < minPoints || end - pts[0][0] < 7) return null
   const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length
   const my = pts.reduce((s, p) => s + p[1], 0) / pts.length
   let num = 0
@@ -416,6 +453,19 @@ export function weeklyRate(entries: BodyWeight[]): number | null {
     den += (x - mx) ** 2
   }
   return den ? (num / den) * 7 : null
+}
+
+/**
+ * Body-weight change per week from a least-squares fit over the last 28 days.
+ * Null until there are at least 3 weigh-ins spanning a week.
+ */
+export function weeklyRate(entries: BodyWeight[]): number | null {
+  return slopePerWeek(entries.map((e) => ({ date: e.date, value: e.weight })))
+}
+
+/** Whole days from one YYYY-MM-DD date to another. */
+export function daysBetween(from: string, to: string) {
+  return Math.round(dayNumber(to) - dayNumber(from))
 }
 
 // ---------------------------------------------------------------------------

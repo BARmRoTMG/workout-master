@@ -34,6 +34,9 @@ const PATHS = {
   pause: 'M8 5v14M16 5v14',
   timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2M10 2.5h4M18.5 6.5l1.5-1.5',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0',
+  egg: 'M12 3c3.6 0 6.5 5.6 6.5 10.2a6.5 6.5 0 0 1-13 0C5.5 8.6 8.4 3 12 3z',
+  tape: 'M3 8.5h18v7H3zM7 8.5v3M11 8.5v4M15 8.5v3M19 8.5v4',
+  star: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z',
 } as const
 
 export type IconName = keyof typeof PATHS
@@ -320,8 +323,10 @@ export function Switch({
         {label}
         {sub && <small>{sub}</small>}
       </span>
-      {children}
-      <button type="button" role="switch" aria-checked={checked} aria-label={label} className="switch" onClick={() => onChange(!checked)} />
+      <span className="switch-ctrl">
+        {children}
+        <button type="button" role="switch" aria-checked={checked} aria-label={label} className="switch" onClick={() => onChange(!checked)} />
+      </span>
     </div>
   )
 }

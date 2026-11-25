@@ -5,6 +5,7 @@ import { Icon, Stepper } from '../components/ui'
 import { saveSettings, type Settings } from '../db'
 import { go, useSettings } from '../hooks'
 import { convertUnits, exportBackup, importBackup } from '../lib/backup'
+import { PRIORITY_EXTRA_SETS } from '../lib/engine'
 import { MUSCLE_LABEL, MUSCLES } from '../lib/muscles'
 
 export function SettingsScreen() {
@@ -65,6 +66,33 @@ export function SettingsScreen() {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Priority muscles</h2>
+        <p className="muted small">
+          For a muscle that's lagging: {PRIORITY_EXTRA_SETS} extra sets every workout, done straight after the big lifts.
+          Pick one or two at most.
+        </p>
+        <div className="chips">
+          {settings.planMuscles.map((m) => {
+            const on = settings.priorityMuscles.includes(m)
+            return (
+              <button
+                type="button"
+                key={m}
+                className={'chip' + (on ? ' on' : '')}
+                aria-pressed={on}
+                onClick={() =>
+                  set({ priorityMuscles: on ? settings.priorityMuscles.filter((x) => x !== m) : [...settings.priorityMuscles, m] })
+                }
+              >
+                {on && '★ '}
+                {MUSCLE_LABEL[m]}
+              </button>
+            )
+          })}
         </div>
       </section>
 

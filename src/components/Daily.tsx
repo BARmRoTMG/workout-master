@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { db, type Settings } from '../db'
-import { useBodyweights, useNow, useSteps } from '../hooks'
+import { db, type Settings, type Unit } from '../db'
+import { useBodyweights, useNow, useSteps, useWaists } from '../hooks'
 import { trendLine, weeklyRate } from '../lib/engine'
 import { dateKey, fmtTime, fmtW } from '../lib/format'
 import { isIOS, pasteStepsFromClipboard, saveSteps, SHORTCUT_NAME, SHORTCUT_URL } from '../lib/steps'
+import { daysSinceWaist, saveWaist, waistDue, waistShown, waistToCm, waistUnit } from '../lib/waist'
 import { Icon, NumInput, Ring, Sheet } from './ui'
 
 /**
@@ -171,17 +172,20 @@ export function ShortcutSetup({ collapsed }: { collapsed?: boolean }) {
 
 export function WeightTile({ settings }: { settings: Settings }) {
   const entries = useBodyweights()
+  const waists = useWaists()
   const [open, setOpen] = useState(false)
-  if (!entries) return <div className="tile" />
+  if (!entries || !waists) return <div className="tile" />
   const today = dateKey()
   const todays = entries.find((e) => e.date === today)
   const trend = trendLine(entries)
   const avg = trend[trend.length - 1]?.avg
   const rate = weeklyRate(entries)
   const unit = settings.unit
+  const due = waistDue(waists)
 
   let sub: string
-  if (!todays) sub = 'Tap to weigh in'
+  if (!todays) sub = due ? 'Weigh in + waist' : 'Tap to weigh in'
+  else if (due) sub = 'Waist due'
   else if (rate !== null) sub = `${rate > 0 ? '+' : ''}${fmtW(Number(rate.toFixed(2)))} ${unit}/week`
   else sub = avg !== undefined && entries.length > 1 ? `7-day avg ${avg.toFixed(1)}` : 'Saved for today'
 
@@ -197,33 +201,86 @@ export function WeightTile({ settings }: { settings: Settings }) {
             {todays ? fmtW(todays.weight) : entries.length ? fmtW(entries[entries.length - 1].weight) : '—'}
             <small> {unit}</small>
           </b>
-          <small className={rate !== null && rate < 0 && todays ? 'ok' : ''}>{sub}</small>
+          <small className={rate !== null && rate < 0 && todays && !due ? 'ok' : ''}>{sub}</small>
         </span>
       </button>
-      {open && <WeightSheet unit={unit} current={todays?.weight ?? null} onClose={() => setOpen(false)} />}
+      {open && (
+        <WeightSheet
+          unit={unit}
+          current={todays?.weight ?? null}
+          waistToday={waists.find((w) => w.date === today)?.cm ?? null}
+          lastWaist={waists[waists.length - 1]?.cm ?? null}
+          daysSince={daysSinceWaist(waists)}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   )
 }
 
-function WeightSheet({ unit, current, onClose }: { unit: string; current: number | null; onClose: () => void }) {
+function WeightSheet({
+  unit,
+  current,
+  waistToday,
+  lastWaist,
+  daysSince,
+  onClose,
+}: {
+  unit: Unit
+  current: number | null
+  waistToday: number | null
+  lastWaist: number | null
+  daysSince: number | null
+  onClose: () => void
+}) {
+  const wu = waistUnit(unit)
   const [value, setValue] = useState<number | null>(current)
+  const [waist, setWaist] = useState<number | null>(waistToday === null ? null : waistShown(waistToday, unit))
+  const due = daysSince === null || daysSince >= 6
   const save = async () => {
-    if (!value) return
+    if (!value && !waist) return
     const date = dateKey()
-    const prior = await db.bodyweights.where('date').equals(date).first()
-    if (prior?.id) await db.bodyweights.update(prior.id, { weight: value })
-    else await db.bodyweights.add({ date, weight: value })
+    if (value) {
+      const prior = await db.bodyweights.where('date').equals(date).first()
+      if (prior?.id) await db.bodyweights.update(prior.id, { weight: value })
+      else await db.bodyweights.add({ date, weight: value })
+    }
+    if (waist) await saveWaist(waistToCm(waist, unit), date)
     onClose()
   }
+
+  let waistNote: string
+  if (daysSince === null) waistNote = 'Waist, once a week: tape level with your belly button, standing relaxed, after a normal breath out.'
+  else if (daysSince === 0) waistNote = 'Waist saved for today.'
+  else if (due) waistNote = `Waist is due: last one ${daysSince} days ago. Same spot, same time of day.`
+  else waistNote = `Waist next in ${6 - daysSince} day${6 - daysSince === 1 ? '' : 's'}. Weekly is enough.`
+
   return (
     <Sheet title="Weigh in" onClose={onClose} fit>
       <p className="muted small">Same time each morning, after the bathroom. The 7-day average is what counts, not one day.</p>
-      <div className="entry-row">
-        <NumInput decimal autoFocus label={`Body weight (${unit})`} value={value} onChange={setValue} placeholder={unit} className="big-num" />
-        <button type="button" className="btn primary" disabled={!value} onClick={save}>
-          Save
-        </button>
+      <div className="weigh-fields">
+        <label className="weigh-field">
+          <span>Weight ({unit})</span>
+          <NumInput decimal autoFocus label={`Body weight (${unit})`} value={value} onChange={setValue} placeholder={unit} className="big-num" />
+        </label>
+        <label className={'weigh-field' + (due ? ' due' : '')}>
+          <span>
+            Waist ({wu}){due && <em>Due</em>}
+          </span>
+          <NumInput
+            decimal
+            label={`Waist (${wu})`}
+            value={waist}
+            onChange={setWaist}
+            placeholder={lastWaist === null ? 'weekly' : fmtW(waistShown(lastWaist, unit))}
+            className="big-num"
+          />
+        </label>
       </div>
+      <p className="muted small">{waistNote}</p>
+      <button type="button" className="btn primary wide" disabled={!value && !waist} onClick={save}>
+        Save
+      </button>
     </Sheet>
   )
 }

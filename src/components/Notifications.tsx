@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useBodyweights, useExerciseMap, useNow, useSettings, useSteps, useWorkouts } from '../hooks'
+import { useBodyweights, useExerciseMap, useNow, useProtein, useSettings, useSteps, useWaists, useWorkouts } from '../hooks'
 import {
   appUrl,
   disableNotifications,
@@ -62,8 +62,8 @@ export function NotificationsCard() {
       body = (
         <>
           <p className="muted small">
-            Rest-over alerts on your lock screen, so you can leave the app between sets, plus a nudge to weigh in, train
-            and log steps.
+            Rest-over alerts on your lock screen, so you can leave the app between sets, plus nudges to weigh in, train, log steps
+            and hit your protein.
           </p>
           <button type="button" className="btn primary wide" disabled={busy} onClick={() => run(enableNotifications)}>
             <Icon name="bell" size={18} /> Turn on notifications
@@ -83,6 +83,8 @@ export function NotificationsCard() {
           <Reminder prefs={prefs} which="weigh" label="Weigh-in" sub="Skipped once you've weighed in" />
           <Reminder prefs={prefs} which="train" label="Workout day" sub="Only on days your muscles are ready" />
           <Reminder prefs={prefs} which="steps" label="Steps" sub="Skipped once today's steps are in" />
+          <Reminder prefs={prefs} which="protein" label="Protein" sub="Only if you're short of your target" />
+          <Reminder prefs={prefs} which="checkin" label="Weekly check-in" sub="Sundays" />
           <div className="row between">
             <button
               type="button"
@@ -109,7 +111,9 @@ export function NotificationsCard() {
   )
 }
 
-function Reminder({ prefs, which, label, sub }: { prefs: NotifyPrefs; which: 'weigh' | 'train' | 'steps'; label: string; sub: string }) {
+type ReminderKey = keyof typeof REMINDER_DEFAULTS
+
+function Reminder({ prefs, which, label, sub }: { prefs: NotifyPrefs; which: ReminderKey; label: string; sub: string }) {
   const time = prefs[which]
   return (
     <Switch label={label} sub={sub} checked={time !== null} onChange={(on) => setNotifyPrefs({ [which]: on ? REMINDER_DEFAULTS[which] : null })}>
@@ -132,6 +136,8 @@ export function ReminderSync() {
   const workouts = useWorkouts()
   const bodyweights = useBodyweights()
   const steps = useSteps()
+  const protein = useProtein()
+  const waists = useWaists()
   const settings = useSettings()
   const exMap = useExerciseMap()
   const now = useNow(60_000)
@@ -142,9 +148,9 @@ export function ReminderSync() {
   }, [on])
 
   useEffect(() => {
-    if (!on || !workouts || !bodyweights || !steps) return
-    setAlerts('daily', dailyAlerts({ prefs, now, workouts, exMap, settings, bodyweights, steps, url: appUrl }))
-  }, [on, prefs, now, workouts, exMap, settings, bodyweights, steps])
+    if (!on || !workouts || !bodyweights || !steps || !protein || !waists) return
+    setAlerts('daily', dailyAlerts({ prefs, now, workouts, exMap, settings, bodyweights, steps, protein, waists, url: appUrl }))
+  }, [on, prefs, now, workouts, exMap, settings, bodyweights, steps, protein, waists])
 
   return null
 }

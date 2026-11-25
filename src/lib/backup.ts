@@ -1,17 +1,19 @@
-import { db, loadSettings, type BodyWeight, type StepDay, type Workout } from '../db'
+import { db, loadSettings, type BodyWeight, type ProteinEntry, type StepDay, type Waist, type Workout } from '../db'
 import type { Exercise } from '../data/exercises'
 import { dateKey } from './format'
 
 interface Backup {
   app: 'workout-master'
-  /** 1 had no steps; 2 adds them. Both restore. */
-  version: 1 | 2
+  /** 1 had no steps; 2 adds them; 3 adds protein and waist. All restore. */
+  version: 1 | 2 | 3
   exportedAt: string
   settings: unknown
   workouts: Workout[]
   bodyweights: BodyWeight[]
   customExercises: Exercise[]
   steps?: StepDay[]
+  protein?: ProteinEntry[]
+  waists?: Waist[]
 }
 
 function download(name: string, text: string, type: string) {
@@ -26,13 +28,15 @@ function download(name: string, text: string, type: string) {
 export async function exportBackup() {
   const data: Backup = {
     app: 'workout-master',
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     settings: await loadSettings(),
     workouts: await db.workouts.toArray(),
     bodyweights: await db.bodyweights.toArray(),
     customExercises: await db.customExercises.toArray(),
     steps: await db.steps.toArray(),
+    protein: await db.protein.toArray(),
+    waists: await db.waists.toArray(),
   }
   download(`workout-backup-${dateKey()}.json`, JSON.stringify(data), 'application/json')
 }
@@ -43,12 +47,22 @@ export async function importBackup(file: File) {
   if (data.app !== 'workout-master' || !Array.isArray(data.workouts)) {
     throw new Error("That file isn't a Workout Master backup.")
   }
-  await db.transaction('rw', [db.workouts, db.bodyweights, db.customExercises, db.kv, db.steps], async () => {
-    await Promise.all([db.workouts.clear(), db.bodyweights.clear(), db.customExercises.clear(), db.steps.clear()])
+  const tables = [db.workouts, db.bodyweights, db.customExercises, db.kv, db.steps, db.protein, db.waists]
+  await db.transaction('rw', tables, async () => {
+    await Promise.all([
+      db.workouts.clear(),
+      db.bodyweights.clear(),
+      db.customExercises.clear(),
+      db.steps.clear(),
+      db.protein.clear(),
+      db.waists.clear(),
+    ])
     await db.workouts.bulkAdd(data.workouts!)
     await db.bodyweights.bulkAdd(data.bodyweights ?? [])
     await db.customExercises.bulkAdd(data.customExercises ?? [])
     await db.steps.bulkAdd(data.steps ?? [])
+    await db.protein.bulkAdd(data.protein ?? [])
+    await db.waists.bulkAdd(data.waists ?? [])
     if (data.settings) await db.kv.put({ key: 'settings', value: data.settings })
   })
   return data.workouts.length

@@ -1,8 +1,10 @@
-import type { BodyWeight, Settings, StepDay, Workout } from '../db'
+import type { BodyWeight, ProteinEntry, Settings, StepDay, Waist, Workout } from '../db'
 import { suggestWorkout, type ExerciseMap } from './engine'
 import { dateKey } from './format'
 import { MUSCLE_LABEL } from './muscles'
+import { proteinByDay, proteinGoal } from './protein'
 import type { AlertIn, NotifyPrefs } from './push'
+import { waistDue } from './waist'
 
 const DAY = 86_400_000
 /** A reminder that couldn't be delivered (phone off) is dropped after this long. */
@@ -28,9 +30,11 @@ function joinNames(names: string[]) {
 }
 
 /**
- * The next weigh-in, workout and steps reminders. Each repeats daily on the
- * server, so they keep coming even if the app isn't opened; whenever it is,
- * they are worked out again (a weigh-in today moves that one to tomorrow).
+ * The next weigh-in, workout, steps, protein and check-in reminders. Each
+ * repeats on the server, so they keep coming even if the app isn't opened;
+ * whenever it is, they are worked out again (a weigh-in today moves that one
+ * to tomorrow). A repeat reuses its text, so anything about today alone goes
+ * in a one-off alert instead.
  */
 export function dailyAlerts(opts: {
   prefs: NotifyPrefs
@@ -40,6 +44,8 @@ export function dailyAlerts(opts: {
   settings: Settings
   bodyweights: BodyWeight[]
   steps: StepDay[]
+  protein: ProteinEntry[]
+  waists: Waist[]
   url: (route: string) => string
 }): AlertIn[] {
   const { prefs, now, workouts, exMap, settings } = opts
@@ -50,7 +56,9 @@ export function dailyAlerts(opts: {
     out.push({
       at: nextDaily(now, prefs.weigh, opts.bodyweights.some((b) => b.date === today)),
       title: 'Weigh in',
-      body: 'Before breakfast, after the bathroom. The 7-day average does the rest.',
+      body: waistDue(opts.waists, now)
+        ? 'Before breakfast, after the bathroom. Your waist is due too (once a week).'
+        : 'Before breakfast, after the bathroom. The 7-day average does the rest.',
       tag: 'weigh',
       url: opts.url(''),
       ttl: TTL,
@@ -92,6 +100,46 @@ export function dailyAlerts(opts: {
       })
       break
     }
+  }
+
+  if (prefs.protein) {
+    const goal = proteinGoal(settings, opts.bodyweights).grams
+    const got = proteinByDay(opts.protein).get(today) ?? 0
+    const tonight = atLocal(now, 0, prefs.protein)
+    if (tonight > now && got < goal) {
+      out.push({
+        at: tonight,
+        title: 'Protein',
+        body: got ? `${got} of ${goal} g so far. ${goal - got} g to go.` : `Nothing logged yet today. Your target is ${goal} g.`,
+        tag: 'protein',
+        url: opts.url(''),
+        ttl: TTL,
+      })
+    }
+    out.push({
+      at: atLocal(now, 1, prefs.protein),
+      title: 'Protein',
+      body: `How much did you get today? Your target is ${goal} g.`,
+      tag: 'protein',
+      url: opts.url(''),
+      ttl: TTL,
+      repeat: DAY,
+    })
+  }
+
+  if (prefs.checkin) {
+    const toSunday = (7 - new Date(now).getDay()) % 7
+    let at = atLocal(now, toSunday, prefs.checkin)
+    if (at <= now) at = atLocal(now, toSunday + 7, prefs.checkin)
+    out.push({
+      at,
+      title: 'Weekly check-in',
+      body: 'How your week went, and the one thing to change next week.',
+      tag: 'checkin',
+      url: opts.url(''),
+      ttl: 12 * 3600,
+      repeat: 7 * DAY,
+    })
   }
 
   return out

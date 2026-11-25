@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { LIBRARY } from '../data/exercises'
 import { DEFAULT_SETTINGS, type Workout } from '../db'
+import type { Muscle } from './muscles'
 import {
   muscleFreshness,
   nextTarget,
   orderExercises,
   personalRecords,
   platesPerSide,
+  setsFor,
   suggestWorkout,
   trendLine,
   weeklyRate,
@@ -126,6 +128,17 @@ describe('orderExercises', () => {
     ])
   })
 
+  it('moves priority muscles up to straight after the compounds, never before them', () => {
+    const ids = ['lateral-raise', 'dumbbell-curl', 'leg-extension', 'lat-pulldown', 'leg-press']
+    expect(orderExercises(ids.map(ex), ['biceps']).map((o) => o.exercise.id)).toEqual([
+      'leg-press',
+      'lat-pulldown',
+      'dumbbell-curl',
+      'leg-extension',
+      'lateral-raise',
+    ])
+  })
+
   it('puts isolation for big muscles after all compounds', () => {
     expect(names(['leg-extension', 'lateral-raise', 'barbell-bench-press'])).toEqual([
       'barbell-bench-press',
@@ -200,6 +213,66 @@ describe('suggestWorkout', () => {
     const s = suggestWorkout({ workouts: [w], exMap, settings: DEFAULT_SETTINGS, now: NOW })
     expect(s.restDay).toBe(true)
     expect(s.recovering.map((r) => r.muscle)).toContain('chest')
+  })
+})
+
+describe('priority muscles', () => {
+  const settings = { ...DEFAULT_SETTINGS, priorityMuscles: ['biceps', 'triceps'] as Muscle[] }
+
+  it('gives a priority muscle two extra sets, capped at six', () => {
+    expect(setsFor(ex('dumbbell-curl'), settings)).toBe(5)
+    expect(setsFor(ex('lat-pulldown'), settings)).toBe(3)
+    expect(setsFor(ex('dumbbell-curl'), { ...settings, setsPerExercise: 5 })).toBe(6)
+    expect(setsFor(ex('dumbbell-curl'), { ...settings, priorityMuscles: [] })).toBe(3)
+  })
+
+  it('targets the extra sets in the suggestion', () => {
+    const s = suggestWorkout({ workouts: [], exMap, settings, now: NOW })
+    const curl = s.items.find((i) => i.exercise.id === 'dumbbell-curl')!
+    expect(curl.target.reps).toHaveLength(5)
+    expect(s.items.find((i) => i.exercise.id === 'leg-press')!.target.reps).toHaveLength(3)
+  })
+
+  it('judges deloads and increases on the base sets, not the extra ones', () => {
+    const curl = ex('dumbbell-curl') // 8–12 reps
+    const tiredTail = [[12, 10], [12, 9], [12, 8], [12, 6], [12, 5]] as [number, number][]
+    const twoTired = [session(NOW - 48 * HOUR, tiredTail), session(NOW - 96 * HOUR, tiredTail)]
+    expect(nextTarget(curl, twoTired, 5, 'kg', 3).rule).toBe('repeat')
+    // Without the base-set rule, the short extra sets would trigger a deload.
+    expect(nextTarget(curl, twoTired, 5, 'kg', 5).rule).toBe('deload')
+    const baseAtTop = [session(NOW - 48 * HOUR, [[12, 12], [12, 12], [12, 12], [12, 9], [12, 8]])]
+    expect(nextTarget(curl, baseAtTop, 5, 'kg', 3)).toMatchObject({ rule: 'increase', weight: 14 })
+    expect(nextTarget(curl, baseAtTop, 5, 'kg', 3).reps).toHaveLength(5)
+  })
+
+  it('still trains arms every session when training every other day for two weeks', () => {
+    const DAY = 24 * HOUR
+    const start = NOW - 14 * DAY
+    const log: Workout[] = []
+    const sessions: { at: number; ids: string[]; armSets: number[] }[] = []
+    for (let t = start; t <= NOW; t += 2 * DAY) {
+      const s = suggestWorkout({ workouts: log, exMap, settings, now: t })
+      expect(s.restDay).toBe(false)
+      log.unshift({
+        id: t,
+        startedAt: t,
+        finishedAt: t + HOUR,
+        exercises: s.items.map((it, i) => ({
+          uid: String(i),
+          exerciseId: it.exercise.id,
+          sets: it.target.reps.map((r) => ({ weight: it.target.weight ?? 20, reps: r ?? it.exercise.repMin, done: true })),
+        })),
+      })
+      const arm = s.items.filter((it) => it.exercise.primary === 'biceps' || it.exercise.primary === 'triceps')
+      sessions.push({ at: t, ids: s.items.map((i) => i.exercise.id), armSets: arm.map((a) => a.target.reps.length) })
+    }
+    for (const sess of sessions) {
+      expect(sess.ids).toContain('dumbbell-curl')
+      expect(sess.ids).toContain('triceps-pushdown')
+      expect(sess.armSets).toEqual([5, 5])
+    }
+    // Direct arm work: 5 sets in each of the 3–4 sessions a week.
+    expect(weeklySets(log, exMap, NOW).biceps).toBeGreaterThanOrEqual(15)
   })
 })
 

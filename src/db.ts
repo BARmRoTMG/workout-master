@@ -45,26 +45,48 @@ export interface StepDay {
   source: 'health' | 'manual'
 }
 
+export interface ProteinEntry {
+  id?: number
+  /** Local date, YYYY-MM-DD. Several entries a day, one per meal or snack. */
+  date: string
+  grams: number
+  at: number
+}
+
+export interface Waist {
+  id?: number
+  /** Local date, YYYY-MM-DD. One entry per day. */
+  date: string
+  /** Always stored in centimetres; shown in inches when the unit is lb. */
+  cm: number
+}
+
 export interface Settings {
   unit: Unit
   planMuscles: Muscle[]
+  /** Muscles that get extra sets each workout, to bring a lagging one up. */
+  priorityMuscles: Muscle[]
   setsPerExercise: number
   restCompound: number
   restIsolation: number
   weeklySetTarget: number
   barWeight: number
   stepGoal: number
+  /** Daily protein target in grams; null works it out from body weight. */
+  proteinTarget: number | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   unit: 'kg',
   planMuscles: ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'biceps', 'triceps'],
+  priorityMuscles: ['biceps', 'triceps'],
   setsPerExercise: 3,
   restCompound: 120,
   restIsolation: 90,
   weeklySetTarget: 10,
   barWeight: 20,
   stepGoal: 8000,
+  proteinTarget: null,
 }
 
 interface KV {
@@ -78,6 +100,8 @@ export const db = new Dexie('workout-master') as Dexie & {
   customExercises: EntityTable<Exercise, 'id'>
   kv: EntityTable<KV, 'key'>
   steps: EntityTable<StepDay, 'date'>
+  protein: EntityTable<ProteinEntry, 'id'>
+  waists: EntityTable<Waist, 'id'>
 }
 
 db.version(1).stores({
@@ -94,6 +118,17 @@ db.version(2).stores({
   customExercises: 'id',
   kv: 'key',
   steps: 'date',
+})
+
+// v3: protein and waist. Existing tables carry over unchanged.
+db.version(3).stores({
+  workouts: '++id, startedAt',
+  bodyweights: '++id, &date',
+  customExercises: 'id',
+  kv: 'key',
+  steps: 'date',
+  protein: '++id, date',
+  waists: '++id, &date',
 })
 
 export async function loadSettings(): Promise<Settings> {

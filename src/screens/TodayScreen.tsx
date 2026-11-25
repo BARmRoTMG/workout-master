@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { TodayCheckIn } from '../components/CheckIn'
 import { StepsTile, WeightTile } from '../components/Daily'
+import { ProteinTile } from '../components/Protein'
 import { Icon } from '../components/ui'
 import type { Settings, Workout } from '../db'
 import { go, useActiveWorkout, useExerciseMap, useNow, useSettings, useWorkouts } from '../hooks'
@@ -57,7 +59,10 @@ export function TodayScreen() {
       <div className="tiles">
         <StepsTile settings={settings} />
         <WeightTile settings={settings} />
+        <ProteinTile settings={settings} />
       </div>
+
+      {!active && finished.length > 0 && <TodayCheckIn />}
 
       {active ? (
         <ActivePlan workout={active} />
@@ -126,7 +131,15 @@ function PlanList({ items, settings }: { items: SuggestedItem[]; settings: Setti
       {items.map((it, i) => (
         <li key={it.exercise.id} className={`fam-${family(it.exercise.primary)}`}>
           <span className="ord">{pad2(i + 1)}</span>
-          <span className="plan-name">{it.exercise.name}</span>
+          <span className="plan-name">
+            {it.exercise.name}
+            {settings.priorityMuscles.includes(it.exercise.primary) && (
+              <b className="prio-star" title="Priority: extra sets" aria-label="priority">
+                {' '}
+                ★
+              </b>
+            )}
+          </span>
           <span className="plan-target">
             {it.target.rule === 'increase' && <b className="up">▲ </b>}
             {it.target.rule === 'deload' && <b className="down">▼ </b>}

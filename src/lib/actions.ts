@@ -1,11 +1,10 @@
 import { DEFAULT_FOR, type Exercise } from '../data/exercises'
 import { db, loadSettings, newUid, type Workout, type WorkoutExercise } from '../db'
-import { exerciseHistory, nextTarget, orderExercises, setsFromTarget, type ExerciseMap, type SuggestedItem } from './engine'
+import { exerciseHistory, nextTarget, orderExercises, setsFor, setsFromTarget, type ExerciseMap, type SuggestedItem } from './engine'
 
 export async function startWorkout(items: SuggestedItem[] = []): Promise<number> {
   const active = await db.workouts.filter((w) => w.finishedAt === null).first()
   if (active?.id) return active.id
-  const { setsPerExercise } = await loadSettings()
   return db.workouts.add({
     startedAt: Date.now(),
     finishedAt: null,
@@ -15,7 +14,8 @@ export async function startWorkout(items: SuggestedItem[] = []): Promise<number>
       reason: it.reason,
       targetNote: it.target.note,
       targetRule: it.target.rule,
-      sets: setsFromTarget(it.target, setsPerExercise),
+      // The target already has one rep goal per set, extra sets for priority muscles included.
+      sets: setsFromTarget(it.target, it.target.reps.length),
     })),
   }) as Promise<number>
 }
@@ -40,18 +40,14 @@ export async function updateExercise(id: number, uid: string, change: (we: Worko
 export async function makeEntry(exercise: Exercise, before: number): Promise<WorkoutExercise> {
   const settings = await loadSettings()
   const workouts = await db.workouts.toArray()
-  const target = nextTarget(
-    exercise,
-    exerciseHistory(workouts, exercise.id, before),
-    settings.setsPerExercise,
-    settings.unit,
-  )
+  const count = setsFor(exercise, settings)
+  const target = nextTarget(exercise, exerciseHistory(workouts, exercise.id, before), count, settings.unit, settings.setsPerExercise)
   return {
     uid: newUid(),
     exerciseId: exercise.id,
     targetNote: target.note,
     targetRule: target.rule,
-    sets: setsFromTarget(target, settings.setsPerExercise),
+    sets: setsFromTarget(target, count),
   }
 }
 
@@ -102,6 +98,7 @@ export async function logPastWorkout(exMap: ExerciseMap): Promise<number> {
   start.setHours(18, 0, 0, 0)
   const exercises = orderExercises(
     settings.planMuscles.map((m) => exMap.get(DEFAULT_FOR[m])).filter((e): e is Exercise => !!e),
+    settings.priorityMuscles,
   )
   return db.workouts.add({
     startedAt: start.getTime(),
@@ -109,7 +106,7 @@ export async function logPastWorkout(exMap: ExerciseMap): Promise<number> {
     exercises: exercises.map(({ exercise }) => ({
       uid: newUid(),
       exerciseId: exercise.id,
-      sets: Array.from({ length: settings.setsPerExercise }, () => ({ weight: null, reps: null, done: true })),
+      sets: Array.from({ length: setsFor(exercise, settings) }, () => ({ weight: null, reps: null, done: true })),
     })),
   }) as Promise<number>
 }

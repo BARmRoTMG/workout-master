@@ -29,9 +29,13 @@ export interface NotifyPrefs {
   weigh: string | null
   train: string | null
   steps: string | null
+  /** Evening nudge when protein is short of the target. */
+  protein: string | null
+  /** Sundays. */
+  checkin: string | null
 }
 
-export const REMINDER_DEFAULTS = { weigh: '08:00', train: '17:00', steps: '21:00' } as const
+export const REMINDER_DEFAULTS = { weigh: '08:00', train: '17:00', steps: '21:00', protein: '19:00', checkin: '10:00' } as const
 
 const PREFS_KEY = 'notify'
 const DEFAULT_PREFS: NotifyPrefs = { id: null, timers: true, ...REMINDER_DEFAULTS }

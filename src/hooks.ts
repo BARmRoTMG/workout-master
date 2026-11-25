@@ -59,6 +59,16 @@ export function useSteps() {
   return useLiveQuery(() => db.steps.orderBy('date').toArray())
 }
 
+/** Protein entries, oldest first. */
+export function useProtein() {
+  return useLiveQuery(() => db.protein.orderBy('date').toArray())
+}
+
+/** Waist measurements, oldest first. */
+export function useWaists() {
+  return useLiveQuery(() => db.waists.orderBy('date').toArray())
+}
+
 // ---------------------------------------------------------------------------
 // Misc
 

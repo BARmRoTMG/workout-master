@@ -4,6 +4,13 @@ export function fmtW(n: number | null | undefined) {
   return String(Number(n.toFixed(2)))
 }
 
+/** −0.3, +1.5, +0.25: a real minus sign, at most `digits` decimals, at least one. */
+export function fmtSigned(n: number, digits = 1) {
+  const abs = Number(Math.abs(n).toFixed(digits))
+  const text = String(abs)
+  return `${abs && n > 0 ? '+' : abs && n < 0 ? '−' : ''}${text.includes('.') || digits === 0 ? text : text + '.0'}`
+}
+
 /** 95 → "1:35". */
 export function fmtClock(totalSecs: number) {
   const s = Math.max(0, Math.round(totalSecs))
